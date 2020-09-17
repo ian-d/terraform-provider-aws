@@ -20,32 +20,43 @@ func dataSourceAwsDocdbOrderableDbInstance() *schema.Resource {
 			},
 
 			"instance_class": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Computed: true,
+				Type:          schema.TypeString,
+				Optional:      true,
+				Computed:      true,
+				ConflictsWith: []string{"preferred_instance_classes"},
+			},
+
+			"default_only": {
+				Type:          schema.TypeBool,
+				Optional:      true,
+				Default:       false,
+				ConflictsWith: []string{"engine_version"},
 			},
 
 			"engine": {
 				Type:     schema.TypeString,
-				Required: true,
+				Optional: true,
+				Default:  "docdb",
 			},
 
 			"engine_version": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Computed: true,
+				Type:          schema.TypeString,
+				Optional:      true,
+				Computed:      true,
+				ConflictsWith: []string{"default_only"},
 			},
 
 			"license_model": {
 				Type:     schema.TypeString,
 				Optional: true,
-				Computed: true,
+				Default:  "na",
 			},
 
 			"preferred_instance_classes": {
-				Type:     schema.TypeList,
-				Optional: true,
-				Elem:     &schema.Schema{Type: schema.TypeString},
+				Type:          schema.TypeList,
+				Optional:      true,
+				Elem:          &schema.Schema{Type: schema.TypeString},
+				ConflictsWith: []string{"instance_class"},
 			},
 
 			"vpc": {
@@ -72,6 +83,24 @@ func dataSourceAwsDocdbOrderableDbInstanceRead(d *schema.ResourceData, meta inte
 
 	if v, ok := d.GetOk("engine_version"); ok {
 		input.EngineVersion = aws.String(v.(string))
+	}
+
+	if v, ok := d.GetOk("default_only"); ok && v.(bool) {
+		input := &docdb.DescribeDBEngineVersionsInput{
+			DefaultOnly: aws.Bool(true),
+			Engine:      input.Engine,
+		}
+
+		result, err := conn.DescribeDBEngineVersions(input)
+		if err != nil {
+			return fmt.Errorf("error reading DocDB default engine version: %w", err)
+		}
+
+		if len(result.DBEngineVersions) < 1 {
+			return fmt.Errorf("no DocDB default engine version found for engine: %v", aws.StringValue(input.Engine))
+		}
+
+		input.EngineVersion = result.DBEngineVersions[0].EngineVersion
 	}
 
 	if v, ok := d.GetOk("license_model"); ok {
