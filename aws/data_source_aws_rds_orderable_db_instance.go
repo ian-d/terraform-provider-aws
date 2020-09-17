@@ -25,18 +25,18 @@ func dataSourceAwsRdsOrderableDbInstance() *schema.Resource {
 				Elem:     &schema.Schema{Type: schema.TypeString},
 			},
 
-			"instance_class": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Computed: true,
-			},
-
 			"engine": {
 				Type:     schema.TypeString,
 				Required: true,
 			},
 
 			"engine_version": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
+			},
+
+			"instance_class": {
 				Type:     schema.TypeString,
 				Optional: true,
 				Computed: true,
@@ -88,13 +88,13 @@ func dataSourceAwsRdsOrderableDbInstance() *schema.Resource {
 				Computed: true,
 			},
 
-			"preferred_engine_versions": {
+			"preferred_instance_classes": {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
 			},
 
-			"preferred_instance_classes": {
+			"preferred_engine_versions": {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
@@ -193,6 +193,22 @@ func dataSourceAwsRdsOrderableDbInstanceRead(d *schema.ResourceData, meta interf
 
 	if v, ok := d.GetOk("engine_version"); ok {
 		input.EngineVersion = aws.String(v.(string))
+	} else {
+		input := &rds.DescribeDBEngineVersionsInput{
+			DefaultOnly: aws.Bool(true),
+			Engine:      input.Engine,
+		}
+
+		result, err := conn.DescribeDBEngineVersions(input)
+		if err != nil {
+			return fmt.Errorf("error reading RDS default engine version: %w", err)
+		}
+
+		if len(result.DBEngineVersions) < 1 {
+			return fmt.Errorf("no RDS default engine version found for engine: %v", aws.StringValue(input.Engine))
+		}
+
+		input.EngineVersion = result.DBEngineVersions[0].EngineVersion
 	}
 
 	if v, ok := d.GetOk("license_model"); ok {
